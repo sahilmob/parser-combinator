@@ -23,6 +23,19 @@ const str =
     );
   };
 
+const sequenceOf =
+  (parsers: Function[]) =>
+  (parseState: ParserState): ParserState[] => {
+    const results: ParserState[] = [];
+    parsers.reduce((acc, curr) => {
+      const result = curr(acc);
+      results.push(result);
+      return result;
+    }, parseState);
+
+    return results;
+  };
+
 const run = (parser: Function, targetString: string) => {
   const initialState: ParserState = {
     index: 0,
@@ -32,6 +45,6 @@ const run = (parser: Function, targetString: string) => {
   return parser(initialState);
 };
 
-const parser = str("hello there!");
+const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 
-console.log(run(parser, "hello there!"));
+console.log(run(parser, "hello there!goodbye there!"));
