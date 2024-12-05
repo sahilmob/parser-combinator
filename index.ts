@@ -213,6 +213,55 @@ const choice = (parsers: Array<Parser>) =>
     );
   });
 
+const many = (parser: Parser) =>
+  new Parser((parseState: ParserState): ParserState => {
+    if (parseState.isError) return parseState;
+
+    const results = [];
+    let done = false;
+    let nextState = parseState;
+
+    while (!done) {
+      const testState = parser.parserStateTransformerFn(nextState);
+      if (!testState.isError) {
+        results.push(testState.result);
+        nextState = testState;
+      } else {
+        done = true;
+      }
+    }
+
+    return updateResults(nextState, results);
+  });
+
+const many1 = (parser: Parser) =>
+  new Parser((parseState: ParserState): ParserState => {
+    if (parseState.isError) return parseState;
+
+    const results = [];
+    let done = false;
+    let nextState = parseState;
+
+    while (!done) {
+      const testState = parser.parserStateTransformerFn(nextState);
+      if (!testState.isError) {
+        results.push(testState.result);
+        nextState = testState;
+      } else {
+        done = true;
+      }
+    }
+
+    if (results.length === 0) {
+      return updateError(
+        parseState,
+        `many1: Unable to match any input using parser at index ${parseState.index}`
+      );
+    }
+
+    return updateResults(nextState, results);
+  });
+
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
 // const parser = str("hellohello")
@@ -227,6 +276,6 @@ const choice = (parsers: Array<Parser>) =>
 //   });
 
 // console.log(parser.run("hello there!goodbye there!"));
-const parser = choice([letters, digits]);
+const parser = many1(choice([letters, digits]));
 
 console.log(parser.run("avc123345df"));
