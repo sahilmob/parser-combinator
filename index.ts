@@ -195,6 +195,24 @@ const sequenceOf = (parsers: Array<Parser>) =>
     return updateResults(nextState, results);
   });
 
+const choice = (parsers: Array<Parser>) =>
+  new Parser((parseState: ParserState): ParserState => {
+    if (parseState.isError) return parseState;
+
+    for (let parser of parsers) {
+      const nextState = parser.parserStateTransformerFn(parseState);
+
+      if (!nextState.isError) {
+        return nextState;
+      }
+    }
+
+    return updateError(
+      parseState,
+      `choice: Unable to match with any parser at index ${parseState.index}`
+    );
+  });
+
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
 // const parser = str("hellohello")
@@ -209,6 +227,6 @@ const sequenceOf = (parsers: Array<Parser>) =>
 //   });
 
 // console.log(parser.run("hello there!goodbye there!"));
-const parser = sequenceOf([letters, digits, letters]);
+const parser = choice([letters, digits]);
 
 console.log(parser.run("avc123345df"));
