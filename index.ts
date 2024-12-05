@@ -12,39 +12,83 @@ type ErrorParseState =
 type ParserState = {
   index: number;
   targetString: string;
-  result: ParseResult;
+  result: ParseResult | ParseResult[];
 } & ErrorParseState;
+
+const isArray = Array.isArray;
+
+const updateState = (
+  state: ParserState,
+  index: number,
+  result: ParseResult
+): ParserState => {
+  return {
+    ...state,
+    index,
+    result,
+  };
+};
+
+const updateResults = (
+  state: ParserState,
+  results: ParseResult[]
+): ParserState => {
+  return {
+    ...state,
+    result: results,
+  };
+};
+
+const updateError = (state: ParserState, errorMsg: string): ParserState => {
+  return {
+    ...state,
+    isError: true,
+    message: errorMsg,
+  };
+};
 
 const str =
   (s: string) =>
   (parserState: ParserState): ParserState => {
-    const { index, targetString } = parserState;
-    if (targetString.startsWith(s, index)) {
-      return {
-        ...parserState,
-        result: s,
-        index: index + s.length,
-      };
+    const { index, targetString, isError } = parserState;
+    if (isError) return parserState;
+
+    const slicedString = targetString.slice(index);
+
+    if (slicedString.length === 0) {
+      return updateError(
+        parserState,
+        `str: Tried to match ${s}, but got end of input.`
+      );
     }
 
-    return {
-      ...parserState,
-      isError: true,
-      message: `Tried to match ${s}, but got ${targetString.slice(0, 10)}`,
-    };
+    if (slicedString.startsWith(s, index)) {
+      return updateState(parserState, index + s.length, s);
+    }
+
+    return updateError(
+      parserState,
+      `str: Tried to match ${s}, but got ${targetString.slice(0, 10)}.`
+    );
   };
 
 const sequenceOf =
-  (parsers: Function[]) =>
-  (parseState: ParserState): ParserState[] => {
-    const results: ParserState[] = [];
-    parsers.reduce((acc, curr) => {
+  (parsers: Array<(state: ParserState) => ParserState>) =>
+  (parseState: ParserState): ParserState => {
+    if (parseState.isError) return parseState;
+
+    const results: ParseResult[] = [];
+    const nextState = parsers.reduce((acc, curr) => {
       const result = curr(acc);
-      results.push(result);
+      if (isArray(result.result)) {
+        results.push(...result.result);
+      } else {
+        results.push(result.result);
+      }
       return result;
     }, parseState);
 
-    return results;
+    return updateResults(nextState, results);
   };
 
 const run = (parser: Function, targetString: string) => {
@@ -60,4 +104,4 @@ const run = (parser: Function, targetString: string) => {
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 const parser = str("hello there!");
 
-console.log(run(parser, "hello there!"));
+console.log(run(parser, "hello there!goodbye there!"));
