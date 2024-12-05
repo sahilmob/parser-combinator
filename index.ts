@@ -1,4 +1,4 @@
-type ParseResult = string | null;
+type ParseResult = string | string[] | null;
 
 type ErrorParseState =
   | {
@@ -12,7 +12,7 @@ type ErrorParseState =
 type ParserState = {
   index: number;
   targetString: string;
-  result: ParseResult | ParseResult[];
+  result: ParseResult;
 } & ErrorParseState;
 
 type ParserStateTransformerFn = (state: ParserState) => ParserState;
@@ -33,7 +33,7 @@ const updateState = (
 
 const updateResults = (
   state: ParserState,
-  results: ParseResult[]
+  results: ParseResult
 ): ParserState => {
   return {
     ...state,
@@ -65,6 +65,29 @@ class Parser {
     };
 
     return this.parserStateTransformerFn(initialState);
+  }
+
+  map(fn: (parseResult: ParseResult) => any) {
+    return new Parser((parserState) => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if (nextState.isError) return nextState;
+
+      return updateResults(nextState, fn(nextState.result));
+    });
+  }
+
+  errorMap(fn: (parseResult: ParseResult, index: number) => any) {
+    return new Parser((parserState) => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if (!nextState.isError) return nextState;
+
+      return updateError(
+        nextState,
+        fn(nextState.errorMessage, nextState.index)
+      );
+    });
   }
 }
 
@@ -99,7 +122,7 @@ const sequenceOf = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
-    const results: ParseResult[] = [];
+    const results: ParseResult = [];
     let nextState = parseState;
     for (let parser of parsers) {
       nextState = parser.parserStateTransformerFn(nextState);
@@ -118,6 +141,20 @@ const sequenceOf = (parsers: Array<Parser>) =>
   });
 
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
-const parser = str("hello there!");
+// const parser = str("hello there!");
+const parser = str("hellohello")
+  .map((v) =>
+    typeof v === "string"
+      ? { value: v.toUpperCase() }
+      : v.map((s) => ({ value: s.toUpperCase() }))
+  )
+  .errorMap((result, index) => {
+    console.log(result, index);
+    return result;
+  });
 
-console.log(parser.run("hello there!goodbye there!"));
+// console.log(parser.run("hello there!goodbye there!"));
+const output = parser.run("hello");
+if (!output.isError) {
+  console.log(output.result);
+}
