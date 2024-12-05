@@ -1,10 +1,19 @@
 type ParseResult = string | null;
 
+type ErrorParseState =
+  | {
+      isError: true;
+      message: string;
+    }
+  | {
+      isError: false;
+    };
+
 type ParserState = {
   index: number;
   targetString: string;
   result: ParseResult;
-};
+} & ErrorParseState;
 
 const str =
   (s: string) =>
@@ -18,9 +27,11 @@ const str =
       };
     }
 
-    throw new Error(
-      `Tried to match ${s}, but got ${targetString.slice(0, 10)}`
-    );
+    return {
+      ...parserState,
+      isError: true,
+      message: `Tried to match ${s}, but got ${targetString.slice(0, 10)}`,
+    };
   };
 
 const sequenceOf =
@@ -41,10 +52,12 @@ const run = (parser: Function, targetString: string) => {
     index: 0,
     targetString,
     result: null,
+    isError: false,
   };
   return parser(initialState);
 };
 
-const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
+// const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
+const parser = str("hello there!");
 
-console.log(run(parser, "hello there!goodbye there!"));
+console.log(run(parser, "hello there!"));
