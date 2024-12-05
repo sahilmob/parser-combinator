@@ -1,4 +1,4 @@
-type ParseResult = string | string[] | null;
+type ParseResult = string | null;
 
 type ErrorParseState =
   | {
@@ -12,7 +12,7 @@ type ErrorParseState =
 type ParserState = {
   index: number;
   targetString: string;
-  result: ParseResult;
+  result: ParseResult | ParseResult[];
 } & ErrorParseState;
 
 type ParserStateTransformerFn = (state: ParserState) => ParserState;
@@ -25,7 +25,7 @@ const isArray = Array.isArray;
 const updateState = (
   state: ParserState,
   index: number,
-  result: ParseResult
+  result: ParseResult | ParseResult[]
 ): ParserState => {
   return {
     ...state,
@@ -36,7 +36,7 @@ const updateState = (
 
 const updateResults = (
   state: ParserState,
-  results: ParseResult
+  results: ParseResult | ParseResult[]
 ): ParserState => {
   return {
     ...state,
@@ -70,7 +70,7 @@ class Parser {
     return this.parserStateTransformerFn(initialState);
   }
 
-  map(fn: (parseResult: ParseResult) => any) {
+  map(fn: (parseResult: ParseResult | ParseResult[]) => any) {
     return new Parser((parserState) => {
       const nextState = this.parserStateTransformerFn(parserState);
 
@@ -177,7 +177,7 @@ const sequenceOf = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
-    const results: ParseResult = [];
+    const results: ParseResult[] = [];
     let nextState = parseState;
     for (let parser of parsers) {
       nextState = parser.parserStateTransformerFn(nextState);
@@ -262,6 +262,12 @@ const many1 = (parser: Parser) =>
     return updateResults(nextState, results);
   });
 
+const between =
+  (leftParser: Parser, rightParser: Parser) => (contentParser: Parser) =>
+    sequenceOf([leftParser, contentParser, rightParser]).map(
+      (result) => result[1]
+    );
+
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
 // const parser = str("hellohello")
@@ -276,6 +282,9 @@ const many1 = (parser: Parser) =>
 //   });
 
 // console.log(parser.run("hello there!goodbye there!"));
-const parser = many1(choice([letters, digits]));
+// const parser = many1(choice([letters, digits]));
+const betweenBrackets = between(str("("), str(")"));
 
-console.log(parser.run("avc123345df"));
+const parser = betweenBrackets(letters);
+
+console.log(parser.run("(hello)"));
