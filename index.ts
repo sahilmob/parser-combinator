@@ -17,6 +17,8 @@ type ParserState = {
 
 type ParserStateTransformerFn = (state: ParserState) => ParserState;
 
+const LETTERS_REGEX = /^[A-Za-z]+/;
+
 const isArray = Array.isArray;
 
 const updateState = (
@@ -118,6 +120,32 @@ const str = (s: string) =>
     );
   });
 
+const letters = new Parser((parserState: ParserState): ParserState => {
+  const { index, targetString, isError } = parserState;
+  if (isError) return parserState;
+
+  const slicedString = targetString.slice(index);
+
+  if (slicedString.length === 0) {
+    return updateError(parserState, `letters: Got unexpected  end of input`);
+  }
+
+  const regexMatch = slicedString.match(LETTERS_REGEX);
+
+  if (regexMatch) {
+    return updateState(
+      parserState,
+      index + regexMatch[0].length,
+      regexMatch[0]
+    );
+  }
+
+  return updateError(
+    parserState,
+    `str: Couldn't match letters at index ${index}`
+  );
+});
+
 const sequenceOf = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
@@ -142,19 +170,18 @@ const sequenceOf = (parsers: Array<Parser>) =>
 
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
-const parser = str("hellohello")
-  .map((v) =>
-    typeof v === "string"
-      ? { value: v.toUpperCase() }
-      : v.map((s) => ({ value: s.toUpperCase() }))
-  )
-  .errorMap((result, index) => {
-    console.log(result, index);
-    return result;
-  });
+// const parser = str("hellohello")
+//   .map((v) =>
+//     typeof v === "string"
+//       ? { value: v.toUpperCase() }
+//       : v.map((s) => ({ value: s.toUpperCase() }))
+//   )
+//   .errorMap((result, index) => {
+//     console.log(result, index);
+//     return result;
+//   });
 
 // console.log(parser.run("hello there!goodbye there!"));
-const output = parser.run("hello");
-if (!output.isError) {
-  console.log(output.result);
-}
+const parser = letters;
+
+console.log(letters.run("goodbye"));
