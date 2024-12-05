@@ -3,7 +3,7 @@ type ParseResult = string | null;
 type ErrorParseState =
   | {
       isError: true;
-      message: string;
+      errorMessage: string;
     }
   | {
       isError: false;
@@ -39,11 +39,11 @@ const updateResults = (
   };
 };
 
-const updateError = (state: ParserState, errorMsg: string): ParserState => {
+const updateError = (state: ParserState, errorMessage: string): ParserState => {
   return {
     ...state,
+    errorMessage,
     isError: true,
-    message: errorMsg,
   };
 };
 
@@ -58,17 +58,20 @@ const str =
     if (slicedString.length === 0) {
       return updateError(
         parserState,
-        `str: Tried to match ${s}, but got end of input.`
+        `str: Tried to match ${s}, but got end of input`
       );
     }
 
-    if (slicedString.startsWith(s, index)) {
+    if (slicedString.startsWith(s)) {
       return updateState(parserState, index + s.length, s);
     }
 
     return updateError(
       parserState,
-      `str: Tried to match ${s}, but got ${targetString.slice(0, 10)}.`
+      `str: Tried to match ${s}, but got ${targetString.slice(
+        index,
+        index + s.length
+      )}`
     );
   };
 
@@ -78,15 +81,19 @@ const sequenceOf =
     if (parseState.isError) return parseState;
 
     const results: ParseResult[] = [];
-    const nextState = parsers.reduce((acc, curr) => {
-      const result = curr(acc);
-      if (isArray(result.result)) {
-        results.push(...result.result);
-      } else {
-        results.push(result.result);
+    let nextState = parseState;
+    for (let parser of parsers) {
+      nextState = parser(nextState);
+      if (nextState.isError) {
+        return updateError(nextState, `sequenceOf: ${nextState.errorMessage}`);
       }
-      return result;
-    }, parseState);
+
+      if (isArray(nextState.result)) {
+        results.push(...nextState.result);
+      } else {
+        results.push(nextState.result);
+      }
+    }
 
     return updateResults(nextState, results);
   };
@@ -101,7 +108,7 @@ const run = (parser: Function, targetString: string) => {
   return parser(initialState);
 };
 
-// const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
-const parser = str("hello there!");
+const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
+// const parser = str("hello there!");
 
 console.log(run(parser, "hello there!goodbye there!"));
