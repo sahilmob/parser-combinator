@@ -15,6 +15,8 @@ type ParserState = {
   result: ParseResult | ParseResult[];
 } & ErrorParseState;
 
+type Parser = (state: ParserState) => ParserState;
+
 const isArray = Array.isArray;
 
 const updateState = (
@@ -76,7 +78,7 @@ const str =
   };
 
 const sequenceOf =
-  (parsers: Array<(state: ParserState) => ParserState>) =>
+  (parsers: Array<Parser>) =>
   (parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
@@ -98,7 +100,7 @@ const sequenceOf =
     return updateResults(nextState, results);
   };
 
-const run = (parser: Function, targetString: string) => {
+const run = (parser: Parser, targetString: string) => {
   const initialState: ParserState = {
     index: 0,
     targetString,
