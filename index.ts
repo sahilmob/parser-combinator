@@ -15,7 +15,7 @@ type ParserState = {
   result: ParseResult | ParseResult[];
 } & ErrorParseState;
 
-type Parser = (state: ParserState) => ParserState;
+type ParserStateTransformerFn = (state: ParserState) => ParserState;
 
 const isArray = Array.isArray;
 
@@ -49,9 +49,27 @@ const updateError = (state: ParserState, errorMessage: string): ParserState => {
   };
 };
 
-const str =
-  (s: string) =>
-  (parserState: ParserState): ParserState => {
+class Parser {
+  parserStateTransformerFn: ParserStateTransformerFn;
+
+  constructor(parserStateTransformerFn: ParserStateTransformerFn) {
+    this.parserStateTransformerFn = parserStateTransformerFn;
+  }
+
+  run(targetString: string) {
+    const initialState: ParserState = {
+      index: 0,
+      targetString,
+      result: null,
+      isError: false,
+    };
+
+    return this.parserStateTransformerFn(initialState);
+  }
+}
+
+const str = (s: string) =>
+  new Parser((parserState: ParserState): ParserState => {
     const { index, targetString, isError } = parserState;
     if (isError) return parserState;
 
@@ -75,17 +93,16 @@ const str =
         index + s.length
       )}`
     );
-  };
+  });
 
-const sequenceOf =
-  (parsers: Array<Parser>) =>
-  (parseState: ParserState): ParserState => {
+const sequenceOf = (parsers: Array<Parser>) =>
+  new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
     const results: ParseResult[] = [];
     let nextState = parseState;
     for (let parser of parsers) {
-      nextState = parser(nextState);
+      nextState = parser.parserStateTransformerFn(nextState);
       if (nextState.isError) {
         return updateError(nextState, `sequenceOf: ${nextState.errorMessage}`);
       }
@@ -98,19 +115,9 @@ const sequenceOf =
     }
 
     return updateResults(nextState, results);
-  };
+  });
 
-const run = (parser: Parser, targetString: string) => {
-  const initialState: ParserState = {
-    index: 0,
-    targetString,
-    result: null,
-    isError: false,
-  };
-  return parser(initialState);
-};
+// const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
+const parser = str("hello there!");
 
-const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
-// const parser = str("hello there!");
-
-console.log(run(parser, "hello there!goodbye there!"));
+console.log(parser.run("hello there!goodbye there!"));
