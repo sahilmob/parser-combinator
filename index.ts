@@ -18,6 +18,7 @@ type ParserState = {
 type ParserStateTransformerFn = (state: ParserState) => ParserState;
 
 const LETTERS_REGEX = /^[A-Za-z]+/;
+const DIGITS_REGEX = /^[0-9]+/;
 
 const isArray = Array.isArray;
 
@@ -142,7 +143,33 @@ const letters = new Parser((parserState: ParserState): ParserState => {
 
   return updateError(
     parserState,
-    `str: Couldn't match letters at index ${index}`
+    `letters: Couldn't match letters at index ${index}`
+  );
+});
+
+const digits = new Parser((parserState: ParserState): ParserState => {
+  const { index, targetString, isError } = parserState;
+  if (isError) return parserState;
+
+  const slicedString = targetString.slice(index);
+
+  if (slicedString.length === 0) {
+    return updateError(parserState, `digits: Got unexpected  end of input`);
+  }
+
+  const regexMatch = slicedString.match(DIGITS_REGEX);
+
+  if (regexMatch) {
+    return updateState(
+      parserState,
+      index + regexMatch[0].length,
+      regexMatch[0]
+    );
+  }
+
+  return updateError(
+    parserState,
+    `digits: Couldn't match digits at index ${index}`
   );
 });
 
@@ -182,6 +209,6 @@ const sequenceOf = (parsers: Array<Parser>) =>
 //   });
 
 // console.log(parser.run("hello there!goodbye there!"));
-const parser = letters;
+const parser = sequenceOf([letters, digits, letters]);
 
-console.log(letters.run("goodbye"));
+console.log(parser.run("avc123345df"));
