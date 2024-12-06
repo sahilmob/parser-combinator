@@ -1,4 +1,8 @@
-type ParseResult = string | null;
+type ParseResult = string | string[] | null;
+type StateResult =
+  | ParseResult
+  | ParseResult[]
+  | Array<ParseResult | ParseResult[]>;
 
 type ErrorParseState =
   | {
@@ -12,7 +16,7 @@ type ErrorParseState =
 type ParserState = {
   index: number;
   targetString: string;
-  result: ParseResult | ParseResult[];
+  result: StateResult;
 } & ErrorParseState;
 
 type ParserStateTransformerFn = (state: ParserState) => ParserState;
@@ -25,7 +29,7 @@ const isArray = Array.isArray;
 const updateState = (
   state: ParserState,
   index: number,
-  result: ParseResult | ParseResult[]
+  result: ParseResult
 ): ParserState => {
   return {
     ...state,
@@ -36,7 +40,7 @@ const updateState = (
 
 const updateResults = (
   state: ParserState,
-  results: ParseResult | ParseResult[]
+  results: StateResult
 ): ParserState => {
   return {
     ...state,
@@ -71,7 +75,7 @@ class Parser {
     return r;
   }
 
-  map(fn: (parseResult: ParseResult | ParseResult[]) => any) {
+  map(fn: (parseResult: StateResult) => any) {
     return new Parser((parserState) => {
       const nextState = this.parserStateTransformerFn(parserState);
 
@@ -191,7 +195,7 @@ const sequenceOf = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
-    const results: ParseResult[] = [];
+    const results: StateResult = [];
     let nextState = parseState;
     for (let parser of parsers) {
       nextState = parser.parserStateTransformerFn(nextState);
@@ -199,9 +203,10 @@ const sequenceOf = (parsers: Array<Parser>) =>
         return updateError(nextState, `sequenceOf: ${nextState.errorMessage}`);
       }
 
-      if (isArray(nextState.result)) {
-        results.push(...nextState.result);
+      if (!isArray(nextState.result)) {
+        results.push(nextState.result);
       } else {
+        // @ts-ignore
         results.push(nextState.result);
       }
     }
@@ -278,16 +283,16 @@ const many1 = (parser: Parser) =>
 
 const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
   new Parser((parserState) => {
-    const results: ParseResult[] = [];
+    const results: Array<StateResult> = [];
     let nextState: ParserState = parserState;
 
     while (true) {
       const testState: ParserState =
         valueParser.parserStateTransformerFn(nextState);
       if (testState.isError) break;
-      if (typeof testState.result === "string") {
-        results.push(testState.result);
-      }
+      // @ts-ignore
+      results.push(testState.result);
+
       nextState = testState;
       const separatorState =
         separatorParser.parserStateTransformerFn(nextState);
@@ -296,8 +301,8 @@ const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
       nextState = separatorState;
     }
 
-    const r = updateResults(nextState, results);
-    return r;
+    // @ts-ignore
+    return updateResults(nextState, results);
   });
 
 const sepBy1 = (separatorParser: Parser) => (valueParser: Parser) =>
@@ -337,6 +342,13 @@ const between =
         ? result[1]
         : result.slice(1, result.length - 1);
     });
+
+const lazy = (parserThunk) =>
+  new Parser((parserState) => {
+    const parser: Parser = parserThunk();
+
+    return parser.parserStateTransformerFn(parserState);
+  });
 
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
@@ -387,9 +399,9 @@ const between =
 
 const betweenSquareBrackets = between(str("["), str("]"));
 const commaSeparated = sepBy(str(","));
-const value = choice([digits, parser]);
+const value = lazy(() => choice([digits, parser]));
 
 const exampleString = "[1,[2,[3],4],5]";
-const parser = betweenSquareBrackets(commaSeparated(digits));
+const parser = betweenSquareBrackets(commaSeparated(value));
 
-console.log(parser.run("[1,2,3,4,5]"));
+console.log(parser.run(exampleString));
