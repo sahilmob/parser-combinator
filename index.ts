@@ -67,7 +67,8 @@ class Parser {
       isError: false,
     };
 
-    return this.parserStateTransformerFn(initialState);
+    const r = this.parserStateTransformerFn(initialState);
+    return r;
   }
 
   map(fn: (parseResult: ParseResult | ParseResult[]) => any) {
@@ -275,11 +276,67 @@ const many1 = (parser: Parser) =>
     return updateResults(nextState, results);
   });
 
+const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
+  new Parser((parserState) => {
+    const results: ParseResult[] = [];
+    let nextState: ParserState = parserState;
+
+    while (true) {
+      const testState: ParserState =
+        valueParser.parserStateTransformerFn(nextState);
+      if (testState.isError) break;
+      if (typeof testState.result === "string") {
+        results.push(testState.result);
+      }
+      nextState = testState;
+      const separatorState =
+        separatorParser.parserStateTransformerFn(nextState);
+      if (separatorState.isError) break;
+
+      nextState = separatorState;
+    }
+
+    const r = updateResults(nextState, results);
+    return r;
+  });
+
+const sepBy1 = (separatorParser: Parser) => (valueParser: Parser) =>
+  new Parser((parserState) => {
+    const results: ParseResult[] = [];
+    let nextState: ParserState = parserState;
+
+    while (true) {
+      const testState: ParserState =
+        valueParser.parserStateTransformerFn(nextState);
+      if (testState.isError) break;
+      if (typeof testState.result === "string") {
+        results.push(testState.result);
+      }
+      nextState = testState;
+      const separatorState =
+        separatorParser.parserStateTransformerFn(nextState);
+      if (separatorState.isError) break;
+
+      nextState = separatorState;
+    }
+
+    if (results.length < 1) {
+      return updateError(
+        parserState,
+        `sep1: Unable to parse any results at index ${parserState.index}`
+      );
+    }
+
+    return updateResults(nextState, results);
+  });
+
 const between =
   (leftParser: Parser, rightParser: Parser) => (contentParser: Parser) =>
-    sequenceOf([leftParser, contentParser, rightParser]).map(
-      (result) => result[1]
-    );
+    sequenceOf([leftParser, contentParser, rightParser]).map((result) => {
+      return typeof result == "string"
+        ? result[1]
+        : result.slice(1, result.length - 1);
+    });
 
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
@@ -296,35 +353,43 @@ const between =
 
 // console.log(parser.run("hello there!goodbye there!"));
 // const parser = many1(choice([letters, digits]));
-const betweenBrackets = between(str("("), str(")"));
+// const betweenBrackets = between(str("("), str(")"));
 
 // const parser = betweenBrackets(letters);
 
-const stringParser = letters.map((r) => ({
-  type: "string",
-  value: r,
-}));
+// const stringParser = letters.map((r) => ({
+//   type: "string",
+//   value: r,
+// }));
 
-const numberParser = digits.map((r) => ({
-  type: "number",
-  value: r,
-}));
+// const numberParser = digits.map((r) => ({
+//   type: "number",
+//   value: r,
+// }));
 
-const diceParser = sequenceOf([digits, str("d"), digits]).map((r) => ({
-  type: "diceroll",
-  value: [Number(r[0]), Number(r[2])],
-}));
+// const diceParser = sequenceOf([digits, str("d"), digits]).map((r) => ({
+//   type: "diceroll",
+//   value: [Number(r[0]), Number(r[2])],
+// }));
 
-const parser = sequenceOf([letters, str(":")])
-  .map((r) => r[0])
-  .chain((type) => {
-    if (type === "string") {
-      return stringParser;
-    } else if (type === "number") {
-      return numberParser;
-    } else if (type === "diceroll") {
-      return diceParser;
-    }
-  });
+// const parser = sequenceOf([letters, str(":")])
+//   .map((r) => r[0])
+//   .chain((type) => {
+//     if (type === "string") {
+//       return stringParser;
+//     } else if (type === "number") {
+//       return numberParser;
+//     }
+//     return diceParser;
+//   });
 
-console.log(parser.run("string:hello"), 1);
+// console.log(parser.run("diceoll:2d8"));
+
+const betweenSquareBrackets = between(str("["), str("]"));
+const commaSeparated = sepBy(str(","));
+const value = choice([digits, parser]);
+
+const exampleString = "[1,[2,[3],4],5]";
+const parser = betweenSquareBrackets(commaSeparated(digits));
+
+console.log(parser.run("[1,2,3,4,5]"));
