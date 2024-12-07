@@ -26,7 +26,7 @@ const DIGITS_REGEX = /^[0-9]+/;
 
 const isArray = Array.isArray;
 
-const updateState = (
+export const updateState = (
   state: ParserState,
   index: number,
   result: ParseResult
@@ -38,7 +38,7 @@ const updateState = (
   };
 };
 
-const updateResults = (
+export const updateResults = (
   state: ParserState,
   results: StateResult
 ): ParserState => {
@@ -48,7 +48,10 @@ const updateResults = (
   };
 };
 
-const updateError = (state: ParserState, errorMessage: string): ParserState => {
+export const updateError = (
+  state: ParserState,
+  errorMessage: string
+): ParserState => {
   return {
     ...state,
     errorMessage,
@@ -56,7 +59,7 @@ const updateError = (state: ParserState, errorMessage: string): ParserState => {
   };
 };
 
-class Parser {
+export class Parser {
   parserStateTransformerFn: ParserStateTransformerFn;
 
   constructor(parserStateTransformerFn: ParserStateTransformerFn) {
@@ -111,7 +114,7 @@ class Parser {
   }
 }
 
-const str = (s: string) =>
+export const str = (s: string) =>
   new Parser((parserState: ParserState): ParserState => {
     const { index, target, isError } = parserState;
     if (isError) return parserState;
@@ -145,7 +148,7 @@ const str = (s: string) =>
     }
   });
 
-const letters = new Parser((parserState: ParserState): ParserState => {
+export const letters = new Parser((parserState: ParserState): ParserState => {
   const { index, target, isError } = parserState;
   if (isError) return parserState;
 
@@ -178,7 +181,7 @@ const letters = new Parser((parserState: ParserState): ParserState => {
   }
 });
 
-const digits = new Parser((parserState: ParserState): ParserState => {
+export const digits = new Parser((parserState: ParserState): ParserState => {
   const { index, target, isError } = parserState;
   if (isError) return parserState;
 
@@ -211,7 +214,7 @@ const digits = new Parser((parserState: ParserState): ParserState => {
   }
 });
 
-const sequenceOf = (parsers: Array<Parser>) =>
+export const sequenceOf = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
@@ -223,16 +226,12 @@ const sequenceOf = (parsers: Array<Parser>) =>
         return updateError(nextState, `sequenceOf: ${nextState.errorMessage}`);
       }
 
-      if (
-        !isArray(nextState.result) &&
-        (typeof nextState.result === "string" ||
-          typeof nextState.result === "number")
-      ) {
-        // @ts-ignore
-        results.push(nextState.result);
-      } else {
+      if (Array.isArray(nextState.result)) {
         // @ts-ignore
         results.push(...nextState.result);
+      } else {
+        // @ts-ignore
+        results.push(nextState.result);
       }
     }
 
@@ -242,7 +241,7 @@ const sequenceOf = (parsers: Array<Parser>) =>
     return updateResults(nextState, results);
   });
 
-const choice = (parsers: Array<Parser>) =>
+export const choice = (parsers: Array<Parser>) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
@@ -260,7 +259,7 @@ const choice = (parsers: Array<Parser>) =>
     );
   });
 
-const many = (parser: Parser) =>
+export const many = (parser: Parser) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
@@ -281,7 +280,7 @@ const many = (parser: Parser) =>
     return updateResults(nextState, results);
   });
 
-const many1 = (parser: Parser) =>
+export const many1 = (parser: Parser) =>
   new Parser((parseState: ParserState): ParserState => {
     if (parseState.isError) return parseState;
 
@@ -309,7 +308,7 @@ const many1 = (parser: Parser) =>
     return updateResults(nextState, results);
   });
 
-const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
+export const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
   new Parser((parserState) => {
     const results: Array<StateResult> = [];
     let nextState: ParserState = parserState;
@@ -333,7 +332,7 @@ const sepBy = (separatorParser: Parser) => (valueParser: Parser) =>
     return updateResults(nextState, results);
   });
 
-const sepBy1 = (separatorParser: Parser) => (valueParser: Parser) =>
+export const sepBy1 = (separatorParser: Parser) => (valueParser: Parser) =>
   new Parser((parserState) => {
     const results: ParseResult[] = [];
     let nextState: ParserState = parserState;
@@ -363,7 +362,7 @@ const sepBy1 = (separatorParser: Parser) => (valueParser: Parser) =>
     return updateResults(nextState, results);
   });
 
-const between =
+export const between =
   (leftParser: Parser, rightParser: Parser) => (contentParser: Parser) =>
     sequenceOf([leftParser, contentParser, rightParser]).map((result) => {
       return typeof result == "string"
@@ -373,24 +372,24 @@ const between =
         : result;
     });
 
-const lazy = (parserThunk) =>
+export const lazy = (parserThunk) =>
   new Parser((parserState) => {
     const parser: Parser = parserThunk();
 
     return parser.parserStateTransformerFn(parserState);
   });
 
-const fail = (errMsg) =>
+export const fail = (errMsg) =>
   new Parser((parserState) => {
     return updateError(parserState, errMsg);
   });
 
-const succeed = (value) =>
+export const succeed = (value) =>
   new Parser((parserState) => {
     return updateResults(parserState, value);
   });
 
-const contextual = (generatorFn) => {
+export const contextual = (generatorFn) => {
   return succeed(null).chain(() => {
     const iterator = generatorFn();
 
@@ -415,7 +414,7 @@ const contextual = (generatorFn) => {
   });
 };
 
-const evaluate = (node) => {
+export const evaluate = (node) => {
   if (node.type === "number") {
     return node.value;
   } else if (node.type === "operation") {
@@ -433,209 +432,3 @@ const evaluate = (node) => {
     }
   }
 };
-
-// const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
-// const parser = str("hello there!");
-// const parser = str("hellohello")
-//   .map((v) =>
-//     typeof v === "string"
-//       ? { value: v.toUpperCase() }
-//       : v.map((s) => ({ value: s.toUpperCase() }))
-//   )
-//   .errorMap((result, index) => {
-//     console.log(result, index);
-//     return result;
-//   });
-
-// console.log(parser.run("hello there!goodbye there!"));
-// const parser = many1(choice([letters, digits]));
-// const betweenBrackets = between(str("("), str(")"));
-
-// const parser = betweenBrackets(letters);
-
-// const stringParser = letters.map((r) => ({
-//   type: "string",
-//   value: r,
-// }));
-
-// const numberParser = digits.map((r) => ({
-//   type: "number",
-//   value: r,
-// }));
-
-// const diceParser = sequenceOf([digits, str("d"), digits]).map((r) => ({
-//   type: "diceroll",
-//   value: [Number(r[0]), Number(r[2])],
-// }));
-
-// const parser = sequenceOf([letters, str(":")])
-//   .map((r) => r[0])
-//   .chain((type) => {
-//     if (type === "string") {
-//       return stringParser;
-//     } else if (type === "number") {
-//       return numberParser;
-//     }
-//     return diceParser;
-//   });
-
-// console.log(parser.run("diceoll:2d8"));
-
-// const betweenSquareBrackets = between(str("["), str("]"));
-// const commaSeparated = sepBy(str(","));
-// const value = lazy(() => choice([digits, parser]));
-
-// const exampleString = "[1,[2,[3],4],5]";
-// const parser = betweenSquareBrackets(commaSeparated(value));
-
-// console.log(parser.run(exampleString));
-
-// const numberParser = digits.map((value) => ({
-//   value: Number(value),
-//   type: "number",
-// }));
-// const operatorParser = choice([str("+"), str("-"), str("*"), str("/")]);
-// const betweenBracketsParser = between(str("("), str(")"));
-// const expr = lazy(() => choice([numberParser, operationParser]));
-// const operationParser = betweenBracketsParser(
-//   sequenceOf([operatorParser, many1(str(" ")), expr, many1(str(" ")), expr])
-// ).map((result) => ({
-//   type: "operation",
-//   value: {
-//     op: result[0],
-//     a: result[2],
-//     b: result[4],
-//   },
-// }));
-// const program = "(+ (* 10 2) (- (/ 50 3) 2))";
-
-// const interpreter = (program) => {
-//   const parseResult = operationParser.run(program);
-
-//   if (parseResult.isError) {
-//     throw new Error("Invalid program");
-//   }
-
-//   return evaluate(parseResult.result);
-// };
-
-// console.log(interpreter(program));
-
-// const Bit = new Parser((parserState) => {
-//   if (parserState.isError) {
-//     return parserState;
-//   }
-
-//   if (parserState.target instanceof DataView) {
-//     const byteOffset = Math.floor(parserState.index / 8);
-
-//     if (byteOffset >= parserState.target.byteLength) {
-//       return updateError(parserState, `Bit: Unexpected end of input`);
-//     }
-
-//     const byte = parserState.target.getUint8(byteOffset);
-//     const bitOffset = 7 - (parserState.index % 8);
-
-//     const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-//     return updateState(parserState, parserState.index + 1, result);
-//   }
-// });
-
-// const Zero = new Parser((parserState) => {
-//   if (parserState.isError) {
-//     return parserState;
-//   }
-
-//   if (parserState.target instanceof DataView) {
-//     const byteOffset = Math.floor(parserState.index / 8);
-
-//     if (byteOffset >= parserState.target.byteLength) {
-//       return updateError(parserState, `Zero: Unexpected end of input`);
-//     }
-
-//     const byte = parserState.target.getUint8(byteOffset);
-//     const bitOffset = 7 - (parserState.index % 8);
-
-//     const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-//     if (result !== 0) {
-//       return updateError(
-//         parserState,
-//         `Zero: expected to get 0, but got ${result} at index ${parserState.index}`
-//       );
-//     }
-
-//     return updateState(parserState, parserState.index + 1, result);
-//   }
-// });
-
-// const One = new Parser((parserState) => {
-//   if (parserState.isError) {
-//     return parserState;
-//   }
-
-//   if (parserState.target instanceof DataView) {
-//     const byteOffset = Math.floor(parserState.index / 8);
-
-//     if (byteOffset >= parserState.target.byteLength) {
-//       return updateError(parserState, `One: Unexpected end of input`);
-//     }
-
-//     const byte = parserState.target.getUint8(byteOffset);
-//     const bitOffset = 7 - (parserState.index % 8);
-
-//     const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-//     if (result !== 1) {
-//       return updateError(
-//         parserState,
-//         `One: expected to get 1, but got ${result} at index ${parserState.index}`
-//       );
-//     }
-
-//     return updateState(parserState, parserState.index + 1, result);
-//   }
-// });
-
-// const parser = sequenceOf([One, One, One, Zero, One, Zero, One, Zero]);
-
-// const data = new Uint8Array([234, 235]).buffer;
-// const dataView = new DataView(data);
-
-// const res = parser.run(dataView);
-
-// console.log(res);
-
-const example1 = `VAR theAnswer INT 42`;
-const example2 = `GLOBAL_VAR greeting STRING "Hello"`;
-const example3 = `VAR skyIsBlue BOOL true`;
-
-const varDeclarationParser = contextual(function* () {
-  const declarationType = yield choice([str("VAR "), str("GLOBAL_VAR ")]);
-
-  const varName = yield letters;
-  const type = yield choice([str(" INT "), str(" STRING "), str(" BOOL ")]);
-
-  let data;
-  if (type === " INT ") {
-    data = yield digits;
-  } else if (type === " STRING ") {
-    data = yield sequenceOf([str('"'), letters, str('"')]).map(
-      (data) => data[1]
-    );
-  } else if (type === " BOOL ") {
-    data = yield choice([str("true"), str("false")]);
-  }
-
-  return {
-    varName,
-    data,
-    type,
-    declarationType,
-  };
-});
-
-console.log(varDeclarationParser.run(example1));
-console.log(varDeclarationParser.run(example2));
-console.log(varDeclarationParser.run(example3));
