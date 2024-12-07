@@ -1,4 +1,4 @@
-type ParseResult = string | string[] | null;
+type ParseResult = string | string[] | DataView | number | null;
 type StateResult =
   | ParseResult
   | ParseResult[]
@@ -15,7 +15,7 @@ type ErrorParseState =
 
 type ParserState = {
   index: number;
-  targetString: string;
+  target: string | DataView;
   result: StateResult;
 } & ErrorParseState;
 
@@ -63,10 +63,10 @@ class Parser {
     this.parserStateTransformerFn = parserStateTransformerFn;
   }
 
-  run(targetString: string) {
+  run(target: string | DataView) {
     const initialState: ParserState = {
+      target,
       index: 0,
-      targetString,
       result: null,
       isError: false,
     };
@@ -114,81 +114,102 @@ class Parser {
 
 const str = (s: string) =>
   new Parser((parserState: ParserState): ParserState => {
-    const { index, targetString, isError } = parserState;
+    const { index, target, isError } = parserState;
     if (isError) return parserState;
 
-    const slicedString = targetString.slice(index);
+    if (typeof target === "string") {
+      const slicedString = target.slice(index);
 
-    if (slicedString.length === 0) {
+      if (slicedString.length === 0) {
+        return updateError(
+          parserState,
+          `str: Tried to match ${s}, but got end of input`
+        );
+      }
+
+      if (slicedString.startsWith(s)) {
+        return updateState(parserState, index + s.length, s);
+      }
+
       return updateError(
         parserState,
-        `str: Tried to match ${s}, but got end of input`
+        `str: Tried to match ${s}, but got ${target.slice(
+          index,
+          index + s.length
+        )}`
+      );
+    } else {
+      return updateError(
+        parserState,
+        `str: Tried to match ${s} with non-string`
       );
     }
+  });
 
-    if (slicedString.startsWith(s)) {
-      return updateState(parserState, index + s.length, s);
+const letters = new Parser((parserState: ParserState): ParserState => {
+  const { index, target, isError } = parserState;
+  if (isError) return parserState;
+
+  if (typeof target === "string") {
+    const slicedString = target.slice(index);
+
+    if (slicedString.length === 0) {
+      return updateError(parserState, `letters: Got unexpected  end of input`);
+    }
+
+    const regexMatch = slicedString.match(LETTERS_REGEX);
+
+    if (regexMatch) {
+      return updateState(
+        parserState,
+        index + regexMatch[0].length,
+        regexMatch[0]
+      );
     }
 
     return updateError(
       parserState,
-      `str: Tried to match ${s}, but got ${targetString.slice(
-        index,
-        index + s.length
-      )}`
+      `letters: Couldn't match letters at index ${index}`
     );
-  });
-
-const letters = new Parser((parserState: ParserState): ParserState => {
-  const { index, targetString, isError } = parserState;
-  if (isError) return parserState;
-
-  const slicedString = targetString.slice(index);
-
-  if (slicedString.length === 0) {
-    return updateError(parserState, `letters: Got unexpected  end of input`);
-  }
-
-  const regexMatch = slicedString.match(LETTERS_REGEX);
-
-  if (regexMatch) {
-    return updateState(
+  } else {
+    return updateError(
       parserState,
-      index + regexMatch[0].length,
-      regexMatch[0]
+      `letters: Tried to match ${target} with non-string`
     );
   }
-
-  return updateError(
-    parserState,
-    `letters: Couldn't match letters at index ${index}`
-  );
 });
 
 const digits = new Parser((parserState: ParserState): ParserState => {
-  const { index, targetString, isError } = parserState;
+  const { index, target, isError } = parserState;
   if (isError) return parserState;
 
-  const slicedString = targetString.slice(index);
+  if (typeof target === "string") {
+    const slicedString = target.slice(index);
 
-  if (slicedString.length === 0) {
-    return updateError(parserState, `digits: Got unexpected  end of input`);
-  }
+    if (slicedString.length === 0) {
+      return updateError(parserState, `digits: Got unexpected  end of input`);
+    }
 
-  const regexMatch = slicedString.match(DIGITS_REGEX);
+    const regexMatch = slicedString.match(DIGITS_REGEX);
 
-  if (regexMatch) {
-    return updateState(
+    if (regexMatch) {
+      return updateState(
+        parserState,
+        index + regexMatch[0].length,
+        regexMatch[0]
+      );
+    }
+
+    return updateError(
       parserState,
-      index + regexMatch[0].length,
-      regexMatch[0]
+      `digits: Couldn't match digits at index ${index}`
+    );
+  } else {
+    return updateError(
+      parserState,
+      `letters: Tried to match ${target} with non-string`
     );
   }
-
-  return updateError(
-    parserState,
-    `digits: Couldn't match digits at index ${index}`
-  );
 });
 
 const sequenceOf = (parsers: Array<Parser>) =>
@@ -203,7 +224,12 @@ const sequenceOf = (parsers: Array<Parser>) =>
         return updateError(nextState, `sequenceOf: ${nextState.errorMessage}`);
       }
 
-      if (!isArray(nextState.result)) {
+      if (
+        !isArray(nextState.result) &&
+        (typeof nextState.result === "string" ||
+          typeof nextState.result === "number")
+      ) {
+        // @ts-ignore
         results.push(nextState.result);
       } else {
         // @ts-ignore
@@ -211,6 +237,9 @@ const sequenceOf = (parsers: Array<Parser>) =>
       }
     }
 
+    if (nextState.isError) {
+      return nextState;
+    }
     return updateResults(nextState, results);
   });
 
@@ -340,7 +369,9 @@ const between =
     sequenceOf([leftParser, contentParser, rightParser]).map((result) => {
       return typeof result == "string"
         ? result[1]
-        : result.slice(1, result.length - 1);
+        : Array.isArray(result)
+        ? result.slice(1, result.length - 1)
+        : result;
     });
 
 const lazy = (parserThunk) =>
@@ -425,33 +456,119 @@ const evaluate = (node) => {
 
 // console.log(parser.run(exampleString));
 
-const numberParser = digits.map((value) => ({
-  value: Number(value),
-  type: "number",
-}));
-const operatorParser = choice([str("+"), str("-"), str("*"), str("/")]);
-const betweenBracketsParser = between(str("("), str(")"));
-const expr = lazy(() => choice([numberParser, operationParser]));
-const operationParser = betweenBracketsParser(
-  sequenceOf([operatorParser, many1(str(" ")), expr, many1(str(" ")), expr])
-).map((result) => ({
-  type: "operation",
-  value: {
-    op: result[0],
-    a: result[2],
-    b: result[4],
-  },
-}));
-const program = "(+ (* 10 2) (- (/ 50 3) 2))";
+// const numberParser = digits.map((value) => ({
+//   value: Number(value),
+//   type: "number",
+// }));
+// const operatorParser = choice([str("+"), str("-"), str("*"), str("/")]);
+// const betweenBracketsParser = between(str("("), str(")"));
+// const expr = lazy(() => choice([numberParser, operationParser]));
+// const operationParser = betweenBracketsParser(
+//   sequenceOf([operatorParser, many1(str(" ")), expr, many1(str(" ")), expr])
+// ).map((result) => ({
+//   type: "operation",
+//   value: {
+//     op: result[0],
+//     a: result[2],
+//     b: result[4],
+//   },
+// }));
+// const program = "(+ (* 10 2) (- (/ 50 3) 2))";
 
-const interpreter = (program) => {
-  const parseResult = operationParser.run(program);
+// const interpreter = (program) => {
+//   const parseResult = operationParser.run(program);
 
-  if (parseResult.isError) {
-    throw new Error("Invalid program");
+//   if (parseResult.isError) {
+//     throw new Error("Invalid program");
+//   }
+
+//   return evaluate(parseResult.result);
+// };
+
+// console.log(interpreter(program));
+
+const Bit = new Parser((parserState) => {
+  if (parserState.isError) {
+    return parserState;
   }
 
-  return evaluate(parseResult.result);
-};
+  if (parserState.target instanceof DataView) {
+    const byteOffset = Math.floor(parserState.index / 8);
 
-console.log(interpreter(program));
+    if (byteOffset >= parserState.target.byteLength) {
+      return updateError(parserState, `Bit: Unexpected end of input`);
+    }
+
+    const byte = parserState.target.getUint8(byteOffset);
+    const bitOffset = 7 - (parserState.index % 8);
+
+    const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+    return updateState(parserState, parserState.index + 1, result);
+  }
+});
+
+const Zero = new Parser((parserState) => {
+  if (parserState.isError) {
+    return parserState;
+  }
+
+  if (parserState.target instanceof DataView) {
+    const byteOffset = Math.floor(parserState.index / 8);
+
+    if (byteOffset >= parserState.target.byteLength) {
+      return updateError(parserState, `Zero: Unexpected end of input`);
+    }
+
+    const byte = parserState.target.getUint8(byteOffset);
+    const bitOffset = 7 - (parserState.index % 8);
+
+    const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+    if (result !== 0) {
+      return updateError(
+        parserState,
+        `Zero: expected to get 0, but got ${result} at index ${parserState.index}`
+      );
+    }
+
+    return updateState(parserState, parserState.index + 1, result);
+  }
+});
+
+const One = new Parser((parserState) => {
+  if (parserState.isError) {
+    return parserState;
+  }
+
+  if (parserState.target instanceof DataView) {
+    const byteOffset = Math.floor(parserState.index / 8);
+
+    if (byteOffset >= parserState.target.byteLength) {
+      return updateError(parserState, `One: Unexpected end of input`);
+    }
+
+    const byte = parserState.target.getUint8(byteOffset);
+    const bitOffset = 7 - (parserState.index % 8);
+
+    const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+    if (result !== 1) {
+      return updateError(
+        parserState,
+        `One: expected to get 1, but got ${result} at index ${parserState.index}`
+      );
+    }
+
+    return updateState(parserState, parserState.index + 1, result);
+  }
+});
+
+const parser = sequenceOf([One, One, One, Zero, One, Zero, One, Zero]);
+
+const data = new Uint8Array([234, 235]).buffer;
+const dataView = new DataView(data);
+
+const res = parser.run(dataView);
+
+console.log(res);
