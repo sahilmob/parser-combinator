@@ -207,7 +207,7 @@ const sequenceOf = (parsers: Array<Parser>) =>
         results.push(nextState.result);
       } else {
         // @ts-ignore
-        results.push(nextState.result);
+        results.push(...nextState.result);
       }
     }
 
@@ -397,11 +397,33 @@ const lazy = (parserThunk) =>
 
 // console.log(parser.run("diceoll:2d8"));
 
-const betweenSquareBrackets = between(str("["), str("]"));
-const commaSeparated = sepBy(str(","));
-const value = lazy(() => choice([digits, parser]));
+// const betweenSquareBrackets = between(str("["), str("]"));
+// const commaSeparated = sepBy(str(","));
+// const value = lazy(() => choice([digits, parser]));
 
-const exampleString = "[1,[2,[3],4],5]";
-const parser = betweenSquareBrackets(commaSeparated(value));
+// const exampleString = "[1,[2,[3],4],5]";
+// const parser = betweenSquareBrackets(commaSeparated(value));
 
-console.log(parser.run(exampleString));
+// console.log(parser.run(exampleString));
+
+const numberParser = digits.map((value) => ({
+  value: Number(value),
+  type: "number",
+}));
+const operatorParser = choice([str("+"), str("-"), str("*"), str("/")]);
+const betweenBracketsParser = between(str("("), str(")"));
+const expr = lazy(() => choice([numberParser, operationParser]));
+const operationParser = betweenBracketsParser(
+  sequenceOf([operatorParser, many1(str(" ")), expr, many1(str(" ")), expr])
+).map((result) => ({
+  type: "operation",
+  value: {
+    op: result[0],
+    a: result[2],
+    b: result[4],
+  },
+}));
+
+const complexSting = "(+ (* 10 2) (- (/ 50 3) 2))";
+
+console.log(JSON.stringify(operationParser.run(complexSting), null, " "));
