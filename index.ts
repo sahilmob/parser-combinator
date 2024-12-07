@@ -104,10 +104,9 @@ class Parser {
 
       if (nextState.isError) return nextState;
 
-      if (typeof nextState.result === "string") {
-        const nextParser = fn(nextState.result);
-        return nextParser.parserStateTransformerFn(nextState);
-      }
+      // @ts-ignore
+      const nextParser = fn(nextState.result);
+      return nextParser.parserStateTransformerFn(nextState);
     });
   }
 }
@@ -381,6 +380,41 @@ const lazy = (parserThunk) =>
     return parser.parserStateTransformerFn(parserState);
   });
 
+const fail = (errMsg) =>
+  new Parser((parserState) => {
+    return updateError(parserState, errMsg);
+  });
+
+const succeed = (value) =>
+  new Parser((parserState) => {
+    return updateResults(parserState, value);
+  });
+
+const contextual = (generatorFn) => {
+  return succeed(null).chain(() => {
+    const iterator = generatorFn();
+
+    const runStep = (nextValue) => {
+      const iteratorResult = iterator.next(nextValue);
+
+      if (iteratorResult.done) {
+        return succeed(iteratorResult.value);
+      }
+
+      const nextParser = iteratorResult.value;
+
+      if (!(nextParser instanceof Parser)) {
+        throw new Error("contextual: yielded values must always be parsers!");
+      }
+
+      return nextParser.chain(runStep);
+    };
+
+    // @ts-ignore
+    return runStep();
+  });
+};
+
 const evaluate = (node) => {
   if (node.type === "number") {
     return node.value;
@@ -487,88 +521,121 @@ const evaluate = (node) => {
 
 // console.log(interpreter(program));
 
-const Bit = new Parser((parserState) => {
-  if (parserState.isError) {
-    return parserState;
+// const Bit = new Parser((parserState) => {
+//   if (parserState.isError) {
+//     return parserState;
+//   }
+
+//   if (parserState.target instanceof DataView) {
+//     const byteOffset = Math.floor(parserState.index / 8);
+
+//     if (byteOffset >= parserState.target.byteLength) {
+//       return updateError(parserState, `Bit: Unexpected end of input`);
+//     }
+
+//     const byte = parserState.target.getUint8(byteOffset);
+//     const bitOffset = 7 - (parserState.index % 8);
+
+//     const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+//     return updateState(parserState, parserState.index + 1, result);
+//   }
+// });
+
+// const Zero = new Parser((parserState) => {
+//   if (parserState.isError) {
+//     return parserState;
+//   }
+
+//   if (parserState.target instanceof DataView) {
+//     const byteOffset = Math.floor(parserState.index / 8);
+
+//     if (byteOffset >= parserState.target.byteLength) {
+//       return updateError(parserState, `Zero: Unexpected end of input`);
+//     }
+
+//     const byte = parserState.target.getUint8(byteOffset);
+//     const bitOffset = 7 - (parserState.index % 8);
+
+//     const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+//     if (result !== 0) {
+//       return updateError(
+//         parserState,
+//         `Zero: expected to get 0, but got ${result} at index ${parserState.index}`
+//       );
+//     }
+
+//     return updateState(parserState, parserState.index + 1, result);
+//   }
+// });
+
+// const One = new Parser((parserState) => {
+//   if (parserState.isError) {
+//     return parserState;
+//   }
+
+//   if (parserState.target instanceof DataView) {
+//     const byteOffset = Math.floor(parserState.index / 8);
+
+//     if (byteOffset >= parserState.target.byteLength) {
+//       return updateError(parserState, `One: Unexpected end of input`);
+//     }
+
+//     const byte = parserState.target.getUint8(byteOffset);
+//     const bitOffset = 7 - (parserState.index % 8);
+
+//     const result = (byte & (1 << bitOffset)) >> bitOffset;
+
+//     if (result !== 1) {
+//       return updateError(
+//         parserState,
+//         `One: expected to get 1, but got ${result} at index ${parserState.index}`
+//       );
+//     }
+
+//     return updateState(parserState, parserState.index + 1, result);
+//   }
+// });
+
+// const parser = sequenceOf([One, One, One, Zero, One, Zero, One, Zero]);
+
+// const data = new Uint8Array([234, 235]).buffer;
+// const dataView = new DataView(data);
+
+// const res = parser.run(dataView);
+
+// console.log(res);
+
+const example1 = `VAR theAnswer INT 42`;
+const example2 = `GLOBAL_VAR greeting STRING "Hello"`;
+const example3 = `VAR skyIsBlue BOOL true`;
+
+const varDeclarationParser = contextual(function* () {
+  const declarationType = yield choice([str("VAR "), str("GLOBAL_VAR ")]);
+
+  const varName = yield letters;
+  const type = yield choice([str(" INT "), str(" STRING "), str(" BOOL ")]);
+
+  let data;
+  if (type === " INT ") {
+    data = yield digits;
+  } else if (type === " STRING ") {
+    data = yield sequenceOf([str('"'), letters, str('"')]).map(
+      (data) => data[1]
+    );
+  } else if (type === " BOOL ") {
+    data = yield choice([str("true"), str("false")]);
   }
 
-  if (parserState.target instanceof DataView) {
-    const byteOffset = Math.floor(parserState.index / 8);
-
-    if (byteOffset >= parserState.target.byteLength) {
-      return updateError(parserState, `Bit: Unexpected end of input`);
-    }
-
-    const byte = parserState.target.getUint8(byteOffset);
-    const bitOffset = 7 - (parserState.index % 8);
-
-    const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-    return updateState(parserState, parserState.index + 1, result);
-  }
+  return {
+    varName,
+    data,
+    type,
+    declarationType,
+  };
 });
 
-const Zero = new Parser((parserState) => {
-  if (parserState.isError) {
-    return parserState;
-  }
-
-  if (parserState.target instanceof DataView) {
-    const byteOffset = Math.floor(parserState.index / 8);
-
-    if (byteOffset >= parserState.target.byteLength) {
-      return updateError(parserState, `Zero: Unexpected end of input`);
-    }
-
-    const byte = parserState.target.getUint8(byteOffset);
-    const bitOffset = 7 - (parserState.index % 8);
-
-    const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-    if (result !== 0) {
-      return updateError(
-        parserState,
-        `Zero: expected to get 0, but got ${result} at index ${parserState.index}`
-      );
-    }
-
-    return updateState(parserState, parserState.index + 1, result);
-  }
-});
-
-const One = new Parser((parserState) => {
-  if (parserState.isError) {
-    return parserState;
-  }
-
-  if (parserState.target instanceof DataView) {
-    const byteOffset = Math.floor(parserState.index / 8);
-
-    if (byteOffset >= parserState.target.byteLength) {
-      return updateError(parserState, `One: Unexpected end of input`);
-    }
-
-    const byte = parserState.target.getUint8(byteOffset);
-    const bitOffset = 7 - (parserState.index % 8);
-
-    const result = (byte & (1 << bitOffset)) >> bitOffset;
-
-    if (result !== 1) {
-      return updateError(
-        parserState,
-        `One: expected to get 1, but got ${result} at index ${parserState.index}`
-      );
-    }
-
-    return updateState(parserState, parserState.index + 1, result);
-  }
-});
-
-const parser = sequenceOf([One, One, One, Zero, One, Zero, One, Zero]);
-
-const data = new Uint8Array([234, 235]).buffer;
-const dataView = new DataView(data);
-
-const res = parser.run(dataView);
-
-console.log(res);
+console.log(varDeclarationParser.run(example1));
+console.log(varDeclarationParser.run(example2));
+console.log(varDeclarationParser.run(example3));
