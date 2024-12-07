@@ -350,6 +350,25 @@ const lazy = (parserThunk) =>
     return parser.parserStateTransformerFn(parserState);
   });
 
+const evaluate = (node) => {
+  if (node.type === "number") {
+    return node.value;
+  } else if (node.type === "operation") {
+    const aResult = evaluate(node.value.a);
+    const bResult = evaluate(node.value.b);
+    switch (node.value.op) {
+      case "+":
+        return aResult + bResult;
+      case "-":
+        return aResult - bResult;
+      case "*":
+        return aResult * bResult;
+      case "/":
+        return aResult / bResult;
+    }
+  }
+};
+
 // const parser = sequenceOf([str("hello there!"), str("goodbye there!")]);
 // const parser = str("hello there!");
 // const parser = str("hellohello")
@@ -423,7 +442,16 @@ const operationParser = betweenBracketsParser(
     b: result[4],
   },
 }));
+const program = "(+ (* 10 2) (- (/ 50 3) 2))";
 
-const complexSting = "(+ (* 10 2) (- (/ 50 3) 2))";
+const interpreter = (program) => {
+  const parseResult = operationParser.run(program);
 
-console.log(JSON.stringify(operationParser.run(complexSting), null, " "));
+  if (parseResult.isError) {
+    throw new Error("Invalid program");
+  }
+
+  return evaluate(parseResult.result);
+};
+
+console.log(interpreter(program));
